@@ -1,19 +1,22 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, Camera, Scan, FileCheck, AlertTriangle, Eye, Flame, Zap, FileSearch } from 'lucide-react';
+import { Upload, Camera, Scan, FileCheck, AlertTriangle, Eye, Flame, Zap, FileSearch, UserCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { useOCR } from '@/hooks/useOCR';
+import { useBiometricVerification } from '@/hooks/useBiometricVerification';
 import { OCRResultsDisplay } from './OCRResultsDisplay';
+import { WebcamCapture, BiometricResult } from './WebcamCapture';
+import { BiometricResultsDisplay } from './BiometricResultsDisplay';
 import { OCRResult } from '@/types/ocr';
 
 interface ForensicScannerProps {
-  onScanComplete: (ocrResult: OCRResult | null) => void;
+  onScanComplete: (ocrResult: OCRResult | null, biometricMatch?: number) => void;
   onReset: () => void;
 }
 
-const getTerminalLogs = (ocrResult: OCRResult | null) => {
+const getTerminalLogs = (ocrResult: OCRResult | null, biometricResult?: BiometricResult | null) => {
   if (!ocrResult) {
     return [
       { type: 'system', text: '[SYSTEM] Initializing Agentic Core...' },
@@ -40,7 +43,7 @@ const getTerminalLogs = (ocrResult: OCRResult | null) => {
     logs.push({ type: 'success', text: `[OCR] Mean Grade: ${ocrResult.structured.meanGrade} (${ocrResult.structured.meanPoints || 'N/A'} pts)` });
   }
 
-  logs.push({ type: 'info', text: `[AI] Confidence Level: ${(ocrResult.confidence * 100).toFixed(0)}%` });
+  logs.push({ type: 'info', text: `[AI] OCR Confidence: ${(ocrResult.confidence * 100).toFixed(0)}%` });
 
   if (ocrResult.verificationElements?.hasWatermark) {
     logs.push({ type: 'success', text: '[VERIFY] Official watermark detected.' });
@@ -52,7 +55,17 @@ const getTerminalLogs = (ocrResult: OCRResult | null) => {
     logs.push({ type: 'success', text: '[VERIFY] Official stamp detected.' });
   }
 
-  // Simulate anomaly detection based on confidence
+  // Add biometric logs
+  if (biometricResult) {
+    logs.push({ type: 'info', text: '[BIO] Biometric capture acquired.' });
+    logs.push({ type: 'success', text: `[BIO] Liveness Score: ${(biometricResult.livenessScore * 100).toFixed(0)}%` });
+    if (biometricResult.passed) {
+      logs.push({ type: 'success', text: '[BIO] Liveness verification PASSED.' });
+    } else {
+      logs.push({ type: 'warning', text: '[BIO] Liveness verification needs review.' });
+    }
+  }
+
   if (ocrResult.confidence < 0.7) {
     logs.push({ type: 'warning', text: '[DEEP-SCAN] Low confidence - manual review recommended.' });
   }
@@ -74,8 +87,10 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
   const [logs, setLogs] = useState<{ type: string; text: string }[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [showOCRResults, setShowOCRResults] = useState(false);
+  const [biometricCapture, setBiometricCapture] = useState<BiometricResult | null>(null);
 
   const { extractText, isExtracting, ocrResult, error: ocrError, reset: resetOCR } = useOCR();
+  const { verifyBiometrics, isVerifying: isBiometricVerifying, result: biometricVerifyResult, reset: resetBiometric } = useBiometricVerification();
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -86,11 +101,13 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
       setPreviewUrl(URL.createObjectURL(file));
       setShowResults(false);
       setShowOCRResults(false);
+      setBiometricCapture(null);
       resetOCR();
+      resetBiometric();
       onReset();
       toast.success('Document uploaded successfully');
     }
-  }, [onReset, resetOCR]);
+  }, [onReset, resetOCR, resetBiometric]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -99,11 +116,23 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
       setPreviewUrl(URL.createObjectURL(file));
       setShowResults(false);
       setShowOCRResults(false);
+      setBiometricCapture(null);
       resetOCR();
+      resetBiometric();
       onReset();
       toast.success('Document uploaded successfully');
     }
   };
+
+  const handleBiometricCapture = useCallback((result: BiometricResult) => {
+    setBiometricCapture(result);
+    toast.success('Biometric captured - Ready for scan');
+  }, []);
+
+  const handleBiometricReset = useCallback(() => {
+    setBiometricCapture(null);
+    resetBiometric();
+  }, [resetBiometric]);
 
   const handleScan = async () => {
     if (!uploadedFile) {
@@ -116,18 +145,23 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
     setShowResults(false);
     setShowOCRResults(false);
 
-    // Add initial logs
     setLogs([{ type: 'system', text: '[SYSTEM] Initializing Agentic Core...' }]);
     await new Promise((resolve) => setTimeout(resolve, 300));
     setLogs((prev) => [...prev, { type: 'info', text: '[OCR] Sending document to AI vision model...' }]);
 
-    // Call the actual OCR
+    // Call OCR
     const result = await extractText(uploadedFile);
 
-    // Generate logs based on OCR result
-    const terminalLogs = getTerminalLogs(result);
+    // If biometric capture exists, run facial comparison
+    if (biometricCapture && previewUrl) {
+      setLogs((prev) => [...prev, { type: 'info', text: '[BIO] Initiating facial comparison...' }]);
+      await verifyBiometrics(previewUrl, biometricCapture.capturedImage, result);
+      setLogs((prev) => [...prev, { type: 'success', text: '[BIO] Facial comparison complete.' }]);
+    }
+
+    // Generate logs
+    const terminalLogs = getTerminalLogs(result, biometricCapture);
     
-    // Animate logs progressively
     for (let i = 2; i < terminalLogs.length; i++) {
       await new Promise((resolve) => setTimeout(resolve, 250));
       setLogs((prev) => [...prev, terminalLogs[i]]);
@@ -137,7 +171,9 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
     setIsScanning(false);
     setShowResults(true);
     setShowOCRResults(true);
-    onScanComplete(result);
+    
+    const biometricScore = biometricVerifyResult?.matchScore || (biometricCapture ? biometricCapture.livenessScore * 100 : undefined);
+    onScanComplete(result, biometricScore);
 
     if (result && result.confidence >= 0.7) {
       toast.success('Scan Complete: Document processed successfully', {
@@ -161,7 +197,9 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
     setShowOCRResults(false);
     setLogs([]);
     setShowHeatmap(false);
+    setBiometricCapture(null);
     resetOCR();
+    resetBiometric();
     onReset();
   };
 
@@ -171,6 +209,8 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
       duration: 4000,
     });
   }, []);
+
+  const isProcessing = isScanning || isExtracting || isBiometricVerifying;
 
   return (
     <div className="flex-1 p-6 overflow-y-auto">
@@ -233,7 +273,7 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
             </div>
           </motion.div>
 
-          {/* Webcam Preview */}
+          {/* Webcam / Biometric Capture */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -243,14 +283,17 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
             <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
               <Camera className="w-5 h-5 text-primary" />
               Biometric Liveness Check
+              {biometricCapture && (
+                <span className="ml-auto text-xs bg-success/20 text-success px-2 py-1 rounded-full flex items-center gap-1">
+                  <UserCheck className="w-3 h-3" /> Captured
+                </span>
+              )}
             </h3>
-            <div className="aspect-video bg-muted rounded-lg flex items-center justify-center border border-border">
-              <div className="text-center">
-                <Camera className="w-16 h-16 mx-auto text-muted-foreground/50 mb-2" />
-                <p className="text-sm text-muted-foreground">Camera Feed Placeholder</p>
-                <p className="text-xs text-muted-foreground">Awaiting activation...</p>
-              </div>
-            </div>
+            <WebcamCapture 
+              onCapture={handleBiometricCapture}
+              onReset={handleBiometricReset}
+              isVerifying={isProcessing}
+            />
           </motion.div>
 
           {/* Scan Button */}
@@ -261,55 +304,27 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
           >
             <Button
               onClick={handleScan}
-              disabled={isScanning || isExtracting || !uploadedFile}
+              disabled={isProcessing || !uploadedFile}
               className="w-full h-16 text-lg font-bold bg-gradient-to-r from-primary to-primary/80 text-primary-foreground pulse-glow disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none"
             >
-              {isScanning || isExtracting ? (
+              {isProcessing ? (
                 <motion.div
                   animate={{ rotate: 360 }}
                   transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
                   className="flex items-center gap-3"
                 >
                   <Scan className="w-6 h-6" />
-                  {isExtracting ? 'EXTRACTING TEXT...' : 'SCANNING...'}
+                  {isBiometricVerifying ? 'COMPARING FACES...' : isExtracting ? 'EXTRACTING TEXT...' : 'SCANNING...'}
                 </motion.div>
               ) : (
                 <span className="flex items-center gap-3">
                   <Scan className="w-6 h-6" />
                   INITIATE FORENSIC SCAN
+                  {biometricCapture && <span className="text-sm opacity-80">(+ Biometric)</span>}
                 </span>
               )}
             </Button>
           </motion.div>
-
-          {/* OCR Results Panel */}
-          {showOCRResults && ocrResult && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="glass-card p-4"
-            >
-              <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-                <FileSearch className="w-4 h-4 text-primary" />
-                EXTRACTED DATA
-              </h3>
-              <OCRResultsDisplay result={ocrResult} />
-            </motion.div>
-          )}
-
-          {/* OCR Error Display */}
-          {ocrError && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-4 bg-danger/10 border border-danger/30 rounded-lg"
-            >
-              <p className="text-danger text-sm flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4" />
-                {ocrError}
-              </p>
-            </motion.div>
-          )}
         </div>
 
         {/* Right Panel - Analysis */}
@@ -349,10 +364,8 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
                     className="w-full h-full object-contain"
                   />
                   
-                  {/* Scanning Animation */}
-                  {(isScanning || isExtracting) && <div className="scan-line" />}
+                  {isProcessing && <div className="scan-line" />}
 
-                  {/* Heatmap Overlays */}
                   <AnimatePresence>
                     {showHeatmap && showResults && (
                       <>
@@ -420,11 +433,55 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
                   </motion.div>
                 ))
               )}
-              {(isScanning || isExtracting) && (
+              {isProcessing && (
                 <span className="inline-block w-2 h-4 bg-primary animate-pulse" />
               )}
             </div>
           </motion.div>
+
+          {/* OCR Results Panel */}
+          {showOCRResults && ocrResult && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="glass-card p-4"
+            >
+              <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                <FileSearch className="w-4 h-4 text-primary" />
+                EXTRACTED DATA
+              </h3>
+              <OCRResultsDisplay result={ocrResult} />
+            </motion.div>
+          )}
+
+          {/* Biometric Results */}
+          {showResults && biometricVerifyResult && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="glass-card p-4"
+            >
+              <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-primary" />
+                BIOMETRIC ANALYSIS
+              </h3>
+              <BiometricResultsDisplay result={biometricVerifyResult} />
+            </motion.div>
+          )}
+
+          {/* Error Displays */}
+          {ocrError && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 bg-danger/10 border border-danger/30 rounded-lg"
+            >
+              <p className="text-danger text-sm flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4" />
+                {ocrError}
+              </p>
+            </motion.div>
+          )}
         </div>
       </div>
     </div>

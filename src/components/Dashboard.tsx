@@ -10,7 +10,7 @@ export function Dashboard() {
   const [showResults, setShowResults] = useState(false);
   const [ocrResult, setOcrResult] = useState<OCRResult | null>(null);
 
-  const handleScanComplete = useCallback((result: OCRResult | null) => {
+  const handleScanComplete = useCallback((result: OCRResult | null, biometricMatch?: number) => {
     setShowResults(true);
     setOcrResult(result);
   }, []);
