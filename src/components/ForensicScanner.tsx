@@ -1,25 +1,69 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, Camera, Scan, FileCheck, AlertTriangle, Eye, Flame, Zap } from 'lucide-react';
+import { Upload, Camera, Scan, FileCheck, AlertTriangle, Eye, Flame, Zap, FileSearch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
+import { useOCR } from '@/hooks/useOCR';
+import { OCRResultsDisplay } from './OCRResultsDisplay';
+import { OCRResult } from '@/types/ocr';
 
 interface ForensicScannerProps {
-  onScanComplete: () => void;
+  onScanComplete: (ocrResult: OCRResult | null) => void;
   onReset: () => void;
 }
 
-const terminalLogs = [
-  { type: 'system', text: '[SYSTEM] Initializing Agentic Core...' },
-  { type: 'info', text: '[OCR] Extracting text... Data: "Leo Chrisben Evans"' },
-  { type: 'success', text: '[BIO] Face Match Confidence: 98.2% (PASS)' },
-  { type: 'info', text: '[GEN-AI] Analyzing pixel artifacts...' },
-  { type: 'warning', text: '[DEEP-SCAN] Checking KNEC Registry...' },
-  { type: 'alert', text: '[ALERT] Anomaly detected in "Mean Grade" sector.' },
-  { type: 'alert', text: '[ALERT] Signature region shows manipulation.' },
-  { type: 'system', text: '[VERDICT] Document flagged for manual review.' },
-];
+const getTerminalLogs = (ocrResult: OCRResult | null) => {
+  if (!ocrResult) {
+    return [
+      { type: 'system', text: '[SYSTEM] Initializing Agentic Core...' },
+      { type: 'info', text: '[OCR] Extracting text...' },
+      { type: 'warning', text: '[SYSTEM] No data extracted.' },
+    ];
+  }
+
+  const logs = [
+    { type: 'system', text: '[SYSTEM] Initializing Agentic Core...' },
+    { type: 'info', text: '[OCR] Extracting text from document...' },
+  ];
+
+  if (ocrResult.structured?.studentName) {
+    logs.push({ type: 'success', text: `[OCR] Student: "${ocrResult.structured.studentName}"` });
+  }
+  if (ocrResult.structured?.indexNumber) {
+    logs.push({ type: 'info', text: `[OCR] Index: ${ocrResult.structured.indexNumber}` });
+  }
+  if (ocrResult.structured?.schoolName) {
+    logs.push({ type: 'info', text: `[OCR] School: "${ocrResult.structured.schoolName}"` });
+  }
+  if (ocrResult.structured?.meanGrade) {
+    logs.push({ type: 'success', text: `[OCR] Mean Grade: ${ocrResult.structured.meanGrade} (${ocrResult.structured.meanPoints || 'N/A'} pts)` });
+  }
+
+  logs.push({ type: 'info', text: `[AI] Confidence Level: ${(ocrResult.confidence * 100).toFixed(0)}%` });
+
+  if (ocrResult.verificationElements?.hasWatermark) {
+    logs.push({ type: 'success', text: '[VERIFY] Official watermark detected.' });
+  }
+  if (ocrResult.verificationElements?.hasQRCode) {
+    logs.push({ type: 'success', text: '[VERIFY] QR code found.' });
+  }
+  if (ocrResult.verificationElements?.hasOfficialStamp) {
+    logs.push({ type: 'success', text: '[VERIFY] Official stamp detected.' });
+  }
+
+  // Simulate anomaly detection based on confidence
+  if (ocrResult.confidence < 0.7) {
+    logs.push({ type: 'warning', text: '[DEEP-SCAN] Low confidence - manual review recommended.' });
+  }
+  if (!ocrResult.verificationElements?.hasWatermark && !ocrResult.verificationElements?.hasOfficialStamp) {
+    logs.push({ type: 'alert', text: '[ALERT] Missing official verification elements!' });
+  }
+
+  logs.push({ type: 'system', text: '[SYSTEM] Scan complete. Awaiting officer decision.' });
+
+  return logs;
+};
 
 export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProps) {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -27,8 +71,11 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
   const [isScanning, setIsScanning] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(false);
-  const [logs, setLogs] = useState<typeof terminalLogs>([]);
+  const [logs, setLogs] = useState<{ type: string; text: string }[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [showOCRResults, setShowOCRResults] = useState(false);
+
+  const { extractText, isExtracting, ocrResult, error: ocrError, reset: resetOCR } = useOCR();
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -38,10 +85,12 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
       setUploadedFile(file);
       setPreviewUrl(URL.createObjectURL(file));
       setShowResults(false);
+      setShowOCRResults(false);
+      resetOCR();
       onReset();
       toast.success('Document uploaded successfully');
     }
-  }, [onReset]);
+  }, [onReset, resetOCR]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -49,6 +98,8 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
       setUploadedFile(file);
       setPreviewUrl(URL.createObjectURL(file));
       setShowResults(false);
+      setShowOCRResults(false);
+      resetOCR();
       onReset();
       toast.success('Document uploaded successfully');
     }
@@ -63,28 +114,54 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
     setIsScanning(true);
     setLogs([]);
     setShowResults(false);
+    setShowOCRResults(false);
 
-    // Simulate scanning with progressive logs
-    for (let i = 0; i < terminalLogs.length; i++) {
-      await new Promise((resolve) => setTimeout(resolve, 400));
+    // Add initial logs
+    setLogs([{ type: 'system', text: '[SYSTEM] Initializing Agentic Core...' }]);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    setLogs((prev) => [...prev, { type: 'info', text: '[OCR] Sending document to AI vision model...' }]);
+
+    // Call the actual OCR
+    const result = await extractText(uploadedFile);
+
+    // Generate logs based on OCR result
+    const terminalLogs = getTerminalLogs(result);
+    
+    // Animate logs progressively
+    for (let i = 2; i < terminalLogs.length; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
       setLogs((prev) => [...prev, terminalLogs[i]]);
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 300));
     setIsScanning(false);
     setShowResults(true);
-    onScanComplete();
-    toast.warning('Scan Complete: 2 Anomalies Found', {
-      icon: <AlertTriangle className="w-5 h-5 text-warning" />,
-    });
+    setShowOCRResults(true);
+    onScanComplete(result);
+
+    if (result && result.confidence >= 0.7) {
+      toast.success('Scan Complete: Document processed successfully', {
+        icon: <FileCheck className="w-5 h-5 text-success" />,
+      });
+    } else if (result) {
+      toast.warning('Scan Complete: Low confidence - review recommended', {
+        icon: <AlertTriangle className="w-5 h-5 text-warning" />,
+      });
+    } else {
+      toast.error('Scan Failed: Could not extract data', {
+        icon: <AlertTriangle className="w-5 h-5 text-danger" />,
+      });
+    }
   };
 
   const handleRemove = () => {
     setUploadedFile(null);
     setPreviewUrl(null);
     setShowResults(false);
+    setShowOCRResults(false);
     setLogs([]);
     setShowHeatmap(false);
+    resetOCR();
     onReset();
   };
 
@@ -184,17 +261,17 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
           >
             <Button
               onClick={handleScan}
-              disabled={isScanning || !uploadedFile}
+              disabled={isScanning || isExtracting || !uploadedFile}
               className="w-full h-16 text-lg font-bold bg-gradient-to-r from-primary to-primary/80 text-primary-foreground pulse-glow disabled:opacity-50 disabled:cursor-not-allowed disabled:animate-none"
             >
-              {isScanning ? (
+              {isScanning || isExtracting ? (
                 <motion.div
                   animate={{ rotate: 360 }}
                   transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
                   className="flex items-center gap-3"
                 >
                   <Scan className="w-6 h-6" />
-                  SCANNING...
+                  {isExtracting ? 'EXTRACTING TEXT...' : 'SCANNING...'}
                 </motion.div>
               ) : (
                 <span className="flex items-center gap-3">
@@ -204,6 +281,35 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
               )}
             </Button>
           </motion.div>
+
+          {/* OCR Results Panel */}
+          {showOCRResults && ocrResult && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="glass-card p-4"
+            >
+              <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
+                <FileSearch className="w-4 h-4 text-primary" />
+                EXTRACTED DATA
+              </h3>
+              <OCRResultsDisplay result={ocrResult} />
+            </motion.div>
+          )}
+
+          {/* OCR Error Display */}
+          {ocrError && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 bg-danger/10 border border-danger/30 rounded-lg"
+            >
+              <p className="text-danger text-sm flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4" />
+                {ocrError}
+              </p>
+            </motion.div>
+          )}
         </div>
 
         {/* Right Panel - Analysis */}
@@ -244,7 +350,7 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
                   />
                   
                   {/* Scanning Animation */}
-                  {isScanning && <div className="scan-line" />}
+                  {(isScanning || isExtracting) && <div className="scan-line" />}
 
                   {/* Heatmap Overlays */}
                   <AnimatePresence>
@@ -314,7 +420,7 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
                   </motion.div>
                 ))
               )}
-              {isScanning && (
+              {(isScanning || isExtracting) && (
                 <span className="inline-block w-2 h-4 bg-primary animate-pulse" />
               )}
             </div>

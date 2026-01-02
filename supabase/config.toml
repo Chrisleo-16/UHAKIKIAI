@@ -1,0 +1,4 @@
+project_id = "gzqwhbpazehlxqehdyse"
+
+[functions.ocr-extract]
+verify_jwt = false

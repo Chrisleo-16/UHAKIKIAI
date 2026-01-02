@@ -1,35 +1,82 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShieldCheck, ShieldX, AlertTriangle, CheckCircle2, XCircle, UserCheck, FileWarning, TrendingUp } from 'lucide-react';
+import { ShieldCheck, ShieldX, AlertTriangle, CheckCircle2, XCircle, UserCheck, FileWarning, TrendingUp, School, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { OCRResult } from '@/types/ocr';
 
 interface DecisionPanelProps {
   showResults: boolean;
-  result?: {
-    candidate: string;
-    institution: string;
-    documentType: string;
-    faceMatch: number;
-    riskScore: number;
-    anomalies: string[];
-    verdict: 'verified' | 'flagged' | 'rejected';
-  };
+  ocrResult?: OCRResult | null;
 }
 
-export function DecisionPanel({ showResults, result }: DecisionPanelProps) {
-  const mockResult = result || {
-    candidate: 'Leo Chrisben Evans',
-    institution: 'University of Nairobi',
-    documentType: 'KCSE Certificate',
-    faceMatch: 98.2,
-    riskScore: 85,
-    anomalies: ['Mean Grade manipulation', 'Signature artifacts'],
-    verdict: 'flagged' as const,
+export function DecisionPanel({ showResults, ocrResult }: DecisionPanelProps) {
+  // Derive data from OCR result or use defaults
+  const candidateName = ocrResult?.structured?.studentName || 'Unknown Candidate';
+  const institution = ocrResult?.structured?.schoolName || 'Unknown Institution';
+  const documentType = 'KCSE Certificate';
+  const meanGrade = ocrResult?.structured?.meanGrade || 'N/A';
+  
+  // Calculate risk score based on OCR confidence and verification elements
+  const calculateRiskScore = () => {
+    if (!ocrResult) return 50;
+    
+    let risk = 100 - (ocrResult.confidence * 100);
+    
+    // Lower risk if verification elements are present
+    if (ocrResult.verificationElements?.hasWatermark) risk -= 10;
+    if (ocrResult.verificationElements?.hasOfficialStamp) risk -= 10;
+    if (ocrResult.verificationElements?.hasQRCode) risk -= 5;
+    if (ocrResult.verificationElements?.hasSignature) risk -= 5;
+    
+    // Higher risk if missing key data
+    if (!ocrResult.structured?.studentName) risk += 15;
+    if (!ocrResult.structured?.indexNumber) risk += 10;
+    if (!ocrResult.structured?.meanGrade) risk += 10;
+    
+    return Math.max(0, Math.min(100, Math.round(risk)));
   };
+
+  const riskScore = calculateRiskScore();
+  
+  // Determine verdict based on risk score
+  const getVerdict = () => {
+    if (riskScore <= 30) return 'verified';
+    if (riskScore <= 60) return 'flagged';
+    return 'rejected';
+  };
+  
+  const verdict = getVerdict();
+
+  // Generate anomalies based on OCR analysis
+  const getAnomalies = () => {
+    const anomalies: string[] = [];
+    
+    if (!ocrResult) return ['No data extracted from document'];
+    
+    if (ocrResult.confidence < 0.7) {
+      anomalies.push('Low OCR confidence - document may be unclear or altered');
+    }
+    if (!ocrResult.verificationElements?.hasWatermark) {
+      anomalies.push('Official watermark not detected');
+    }
+    if (!ocrResult.verificationElements?.hasOfficialStamp) {
+      anomalies.push('Official stamp not detected');
+    }
+    if (!ocrResult.structured?.indexNumber) {
+      anomalies.push('Student index number not found');
+    }
+    if (ocrResult.notes) {
+      anomalies.push(ocrResult.notes);
+    }
+    
+    return anomalies;
+  };
+
+  const anomalies = getAnomalies();
 
   const handleApprove = () => {
     toast.success('Enrollment Approved', {
-      description: `${mockResult.candidate} has been cleared for enrollment.`,
+      description: `${candidateName} has been cleared for enrollment.`,
       icon: <CheckCircle2 className="w-5 h-5 text-success" />,
     });
   };
@@ -41,7 +88,7 @@ export function DecisionPanel({ showResults, result }: DecisionPanelProps) {
     });
   };
 
-  const riskAngle = (mockResult.riskScore / 100) * 180;
+  const riskAngle = (riskScore / 100) * 180;
 
   return (
     <motion.aside
@@ -86,7 +133,9 @@ export function DecisionPanel({ showResults, result }: DecisionPanelProps) {
                 animate={{ scale: 1 }}
                 transition={{ delay: 1 }}
               >
-                <span className="text-4xl font-bold text-danger">{mockResult.riskScore}%</span>
+                <span className={`text-4xl font-bold ${riskScore > 60 ? 'text-danger' : riskScore > 30 ? 'text-warning' : 'text-success'}`}>
+                  {riskScore}%
+                </span>
                 <p className="text-sm text-muted-foreground mt-1">Risk Level</p>
               </motion.div>
             )}
@@ -103,24 +152,24 @@ export function DecisionPanel({ showResults, result }: DecisionPanelProps) {
             exit={{ opacity: 0, scale: 0.9 }}
             transition={{ delay: 1.2 }}
             className={`p-6 rounded-xl text-center border-2 ${
-              mockResult.verdict === 'verified'
+              verdict === 'verified'
                 ? 'bg-success/10 border-success text-success'
-                : mockResult.verdict === 'flagged'
+                : verdict === 'flagged'
                 ? 'bg-warning/10 border-warning text-warning'
                 : 'bg-danger/10 border-danger text-danger'
             }`}
           >
-            {mockResult.verdict === 'verified' ? (
+            {verdict === 'verified' ? (
               <ShieldCheck className="w-12 h-12 mx-auto mb-2" />
-            ) : mockResult.verdict === 'flagged' ? (
+            ) : verdict === 'flagged' ? (
               <AlertTriangle className="w-12 h-12 mx-auto mb-2" />
             ) : (
               <ShieldX className="w-12 h-12 mx-auto mb-2" />
             )}
             <h2 className="text-xl font-bold uppercase tracking-wide">
-              {mockResult.verdict === 'verified'
+              {verdict === 'verified'
                 ? 'VERIFIED'
-                : mockResult.verdict === 'flagged'
+                : verdict === 'flagged'
                 ? 'FLAGGED FOR REVIEW'
                 : 'REJECTED'}
             </h2>
@@ -143,7 +192,15 @@ export function DecisionPanel({ showResults, result }: DecisionPanelProps) {
               <UserCheck className="w-4 h-4 text-primary" />
               <div>
                 <p className="text-xs text-muted-foreground">Name</p>
-                <p className="text-sm font-medium text-foreground">{mockResult.candidate}</p>
+                <p className="text-sm font-medium text-foreground">{candidateName}</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <School className="w-4 h-4 text-primary" />
+              <div>
+                <p className="text-xs text-muted-foreground">Institution</p>
+                <p className="text-sm font-medium text-foreground">{institution}</p>
               </div>
             </div>
             
@@ -151,15 +208,25 @@ export function DecisionPanel({ showResults, result }: DecisionPanelProps) {
               <FileWarning className="w-4 h-4 text-primary" />
               <div>
                 <p className="text-xs text-muted-foreground">Document</p>
-                <p className="text-sm font-medium text-foreground">{mockResult.documentType}</p>
+                <p className="text-sm font-medium text-foreground">{documentType}</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <BookOpen className="w-4 h-4 text-primary" />
+              <div>
+                <p className="text-xs text-muted-foreground">Mean Grade</p>
+                <p className="text-sm font-medium text-primary">{meanGrade}</p>
               </div>
             </div>
             
             <div className="flex items-center gap-3">
               <TrendingUp className="w-4 h-4 text-success" />
               <div>
-                <p className="text-xs text-muted-foreground">Face Match</p>
-                <p className="text-sm font-medium text-success">{mockResult.faceMatch}%</p>
+                <p className="text-xs text-muted-foreground">OCR Confidence</p>
+                <p className="text-sm font-medium text-success">
+                  {ocrResult ? `${(ocrResult.confidence * 100).toFixed(0)}%` : 'N/A'}
+                </p>
               </div>
             </div>
           </motion.div>
@@ -168,7 +235,7 @@ export function DecisionPanel({ showResults, result }: DecisionPanelProps) {
 
       {/* Anomalies List */}
       <AnimatePresence>
-        {showResults && mockResult.anomalies.length > 0 && (
+        {showResults && anomalies.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -177,10 +244,10 @@ export function DecisionPanel({ showResults, result }: DecisionPanelProps) {
           >
             <h3 className="text-sm font-semibold text-danger mb-3 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4" />
-              ANOMALIES DETECTED
+              ANOMALIES DETECTED ({anomalies.length})
             </h3>
             <ul className="space-y-2">
-              {mockResult.anomalies.map((anomaly, idx) => (
+              {anomalies.map((anomaly, idx) => (
                 <li key={idx} className="text-sm text-muted-foreground flex items-start gap-2">
                   <span className="w-1.5 h-1.5 bg-danger rounded-full mt-1.5 shrink-0" />
                   {anomaly}

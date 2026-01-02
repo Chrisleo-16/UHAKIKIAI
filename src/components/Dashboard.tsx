@@ -1,19 +1,23 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { ForensicScanner } from './ForensicScanner';
 import { DecisionPanel } from './DecisionPanel';
+import { OCRResult } from '@/types/ocr';
 
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState('scan');
   const [showResults, setShowResults] = useState(false);
+  const [ocrResult, setOcrResult] = useState<OCRResult | null>(null);
 
-  const handleScanComplete = useCallback(() => {
+  const handleScanComplete = useCallback((result: OCRResult | null) => {
     setShowResults(true);
+    setOcrResult(result);
   }, []);
 
   const handleReset = useCallback(() => {
     setShowResults(false);
+    setOcrResult(null);
   }, []);
 
   return (
@@ -31,7 +35,7 @@ export function Dashboard() {
           {activeTab === 'scan' && (
             <>
               <ForensicScanner onScanComplete={handleScanComplete} onReset={handleReset} />
-              <DecisionPanel showResults={showResults} />
+              <DecisionPanel showResults={showResults} ocrResult={ocrResult} />
             </>
           )}
 
