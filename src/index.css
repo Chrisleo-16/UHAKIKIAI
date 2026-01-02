@@ -252,4 +252,9 @@
   ::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground));
   }
+
+  /* Mirror webcam */
+  .mirror {
+    transform: scaleX(-1);
+  }
 }
