@@ -3,39 +3,39 @@ import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { ForensicScanner } from './ForensicScanner';
 import { DecisionPanel } from './DecisionPanel';
+import { VerificationHistory } from './VerificationHistory';
 import { OCRResult } from '@/types/ocr';
 
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState('scan');
   const [showResults, setShowResults] = useState(false);
   const [ocrResult, setOcrResult] = useState<OCRResult | null>(null);
+  const [biometricScore, setBiometricScore] = useState<number | undefined>();
 
-  const handleScanComplete = useCallback((result: OCRResult | null, biometricMatch?: number) => {
+  const handleScanComplete = useCallback((result: OCRResult | null, bioMatch?: number) => {
     setShowResults(true);
     setOcrResult(result);
+    setBiometricScore(bioMatch);
   }, []);
 
   const handleReset = useCallback(() => {
     setShowResults(false);
     setOcrResult(null);
+    setBiometricScore(undefined);
   }, []);
 
   return (
     <div className="flex h-screen w-full bg-background cyber-grid overflow-hidden">
-      {/* Sidebar */}
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Bar */}
         <TopBar />
 
-        {/* Content Area */}
         <div className="flex-1 flex overflow-hidden">
           {activeTab === 'scan' && (
             <>
               <ForensicScanner onScanComplete={handleScanComplete} onReset={handleReset} />
-              <DecisionPanel showResults={showResults} ocrResult={ocrResult} />
+              <DecisionPanel showResults={showResults} ocrResult={ocrResult} biometricScore={biometricScore} />
             </>
           )}
 
@@ -44,19 +44,17 @@ export function Dashboard() {
               <div className="glass-card p-12 text-center max-w-md">
                 <h2 className="text-2xl font-bold text-foreground mb-2">Dashboard</h2>
                 <p className="text-muted-foreground">
-                  Analytics and statistics module coming soon. Track verification metrics, fraud detection rates, and system performance.
+                  Analytics and statistics module coming soon.
                 </p>
               </div>
             </div>
           )}
 
           {activeTab === 'cases' && (
-            <div className="flex-1 p-6 flex items-center justify-center">
-              <div className="glass-card p-12 text-center max-w-md">
-                <h2 className="text-2xl font-bold text-foreground mb-2">Case Files</h2>
-                <p className="text-muted-foreground">
-                  Access historical verification records, flagged documents, and investigation reports.
-                </p>
+            <div className="flex-1 p-6 overflow-y-auto">
+              <div className="max-w-4xl mx-auto">
+                <h2 className="text-2xl font-bold text-foreground mb-6">Verification History</h2>
+                <VerificationHistory />
               </div>
             </div>
           )}
@@ -66,7 +64,7 @@ export function Dashboard() {
               <div className="glass-card p-12 text-center max-w-md">
                 <h2 className="text-2xl font-bold text-foreground mb-2">Settings</h2>
                 <p className="text-muted-foreground">
-                  Configure system preferences, detection thresholds, and integration endpoints.
+                  Configure system preferences and thresholds.
                 </p>
               </div>
             </div>

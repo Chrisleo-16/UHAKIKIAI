@@ -3,13 +3,16 @@ import { ShieldCheck, ShieldX, AlertTriangle, CheckCircle2, XCircle, UserCheck, 
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { OCRResult } from '@/types/ocr';
+import { ExportReports } from './ExportReports';
+import { ValidationDisplay } from './ValidationDisplay';
 
 interface DecisionPanelProps {
   showResults: boolean;
   ocrResult?: OCRResult | null;
+  biometricScore?: number;
 }
 
-export function DecisionPanel({ showResults, ocrResult }: DecisionPanelProps) {
+export function DecisionPanel({ showResults, ocrResult, biometricScore }: DecisionPanelProps) {
   // Derive data from OCR result or use defaults
   const candidateName = ocrResult?.structured?.studentName || 'Unknown Candidate';
   const institution = ocrResult?.structured?.schoolName || 'Unknown Institution';
@@ -286,7 +289,20 @@ export function DecisionPanel({ showResults, ocrResult }: DecisionPanelProps) {
         )}
       </AnimatePresence>
 
-      {/* Placeholder when no results */}
+      {/* Validation & Export */}
+      <AnimatePresence>
+        {showResults && (
+          <>
+            <ValidationDisplay ocrResult={ocrResult || null} />
+            <ExportReports 
+              ocrResult={ocrResult || null} 
+              biometricScore={biometricScore}
+              candidateName={ocrResult?.structured?.studentName}
+            />
+          </>
+        )}
+      </AnimatePresence>
+
       {!showResults && (
         <div className="flex flex-col items-center justify-center h-64 text-center">
           <ShieldCheck className="w-16 h-16 text-muted-foreground/30 mb-4" />
