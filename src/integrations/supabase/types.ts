@@ -14,7 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      verifications: {
+        Row: {
+          biometric_score: number | null
+          created_at: string
+          document_name: string
+          document_type: string | null
+          fraud_type: string | null
+          id: string
+          index_number: string | null
+          institution: string | null
+          ocr_confidence: number | null
+          risk_score: number | null
+          student_name: string | null
+          updated_at: string
+          validation_passed: boolean | null
+          verdict: string
+        }
+        Insert: {
+          biometric_score?: number | null
+          created_at?: string
+          document_name: string
+          document_type?: string | null
+          fraud_type?: string | null
+          id?: string
+          index_number?: string | null
+          institution?: string | null
+          ocr_confidence?: number | null
+          risk_score?: number | null
+          student_name?: string | null
+          updated_at?: string
+          validation_passed?: boolean | null
+          verdict: string
+        }
+        Update: {
+          biometric_score?: number | null
+          created_at?: string
+          document_name?: string
+          document_type?: string | null
+          fraud_type?: string | null
+          id?: string
+          index_number?: string | null
+          institution?: string | null
+          ocr_confidence?: number | null
+          risk_score?: number | null
+          student_name?: string | null
+          updated_at?: string
+          validation_passed?: boolean | null
+          verdict?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
