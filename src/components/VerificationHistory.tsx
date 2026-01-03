@@ -1,86 +1,62 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Clock, Shield, ShieldCheck, ShieldX, AlertTriangle, ChevronRight, User, School } from 'lucide-react';
+import { Clock, Shield, ShieldCheck, ShieldX, AlertTriangle, ChevronRight, User, School, Loader2, RefreshCw } from 'lucide-react';
 import { SearchFilter, VerificationRecord } from './SearchFilter';
 import { ExportReports } from './ExportReports';
-
-// Mock data for demonstration
-const mockRecords: VerificationRecord[] = [
-  {
-    id: '1',
-    candidateName: 'John Kamau Mwangi',
-    indexNumber: '12345678/2023',
-    institution: 'Starehe Boys Centre',
-    meanGrade: 'A',
-    verdict: 'verified',
-    riskScore: 15,
-    createdAt: new Date(Date.now() - 1000 * 60 * 30), // 30 mins ago
-    ocrConfidence: 0.95,
-  },
-  {
-    id: '2',
-    candidateName: 'Mary Wanjiku Njoroge',
-    indexNumber: '23456789/2023',
-    institution: 'Kenya High School',
-    meanGrade: 'A-',
-    verdict: 'verified',
-    riskScore: 22,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-    ocrConfidence: 0.91,
-  },
-  {
-    id: '3',
-    candidateName: 'Peter Ochieng Otieno',
-    indexNumber: '34567890/2023',
-    institution: 'Maseno School',
-    meanGrade: 'B+',
-    verdict: 'flagged',
-    riskScore: 45,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5), // 5 hours ago
-    ocrConfidence: 0.72,
-  },
-  {
-    id: '4',
-    candidateName: 'Grace Akinyi Ouma',
-    indexNumber: '45678901/2023',
-    institution: 'Pangani Girls',
-    meanGrade: 'B',
-    verdict: 'rejected',
-    riskScore: 78,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-    ocrConfidence: 0.45,
-  },
-  {
-    id: '5',
-    candidateName: 'David Kipchoge Korir',
-    indexNumber: '56789012/2022',
-    institution: 'Alliance High School',
-    meanGrade: 'A',
-    verdict: 'verified',
-    riskScore: 12,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), // 3 days ago
-    ocrConfidence: 0.98,
-  },
-  {
-    id: '6',
-    candidateName: 'Sarah Chebet Rotich',
-    indexNumber: '67890123/2023',
-    institution: 'Moi Girls Eldoret',
-    meanGrade: 'B+',
-    verdict: 'flagged',
-    riskScore: 52,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5), // 5 days ago
-    ocrConfidence: 0.68,
-  },
-];
+import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
 
 interface VerificationHistoryProps {
   onSelectRecord?: (record: VerificationRecord) => void;
 }
 
 export function VerificationHistory({ onSelectRecord }: VerificationHistoryProps) {
-  const [filteredRecords, setFilteredRecords] = useState<VerificationRecord[]>(mockRecords);
+  const [filteredRecords, setFilteredRecords] = useState<VerificationRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<VerificationRecord | null>(null);
+
+  const { data: records = [], isLoading, refetch } = useQuery({
+    queryKey: ['verification-history'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('verifications')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      // Transform to VerificationRecord format
+      return data.map((v): VerificationRecord => ({
+        id: v.id,
+        candidateName: v.student_name || 'Unknown Candidate',
+        indexNumber: v.index_number || 'N/A',
+        institution: v.institution || 'Unknown Institution',
+        meanGrade: 'N/A',
+        verdict: v.verdict as 'verified' | 'flagged' | 'rejected',
+        riskScore: v.risk_score || 0,
+        createdAt: new Date(v.created_at),
+        ocrConfidence: v.ocr_confidence ? Number(v.ocr_confidence) / 100 : 0,
+      }));
+    },
+  });
+
+  // Subscribe to realtime updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('verifications-changes')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'verifications' },
+        () => {
+          refetch();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refetch]);
 
   const handleFilteredRecords = useCallback((records: VerificationRecord[]) => {
     setFilteredRecords(records);
@@ -127,10 +103,29 @@ export function VerificationHistory({ onSelectRecord }: VerificationHistoryProps
     return date.toLocaleDateString();
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
+      {/* Header with Refresh */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-foreground">
+          {records.length} Verification Records
+        </h3>
+        <Button variant="ghost" size="sm" onClick={() => refetch()} className="gap-2">
+          <RefreshCw className="w-4 h-4" />
+          Refresh
+        </Button>
+      </div>
+
       {/* Search & Filter */}
-      <SearchFilter records={mockRecords} onFilteredRecords={handleFilteredRecords} />
+      <SearchFilter records={records} onFilteredRecords={handleFilteredRecords} />
 
       {/* Records List */}
       <div className="space-y-2">
@@ -142,7 +137,9 @@ export function VerificationHistory({ onSelectRecord }: VerificationHistoryProps
               className="glass-card p-8 text-center"
             >
               <Shield className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-muted-foreground">No records match your search criteria</p>
+              <p className="text-muted-foreground">
+                {records.length === 0 ? 'No verification records yet. Start a scan to create records.' : 'No records match your search criteria'}
+              </p>
             </motion.div>
           ) : (
             filteredRecords.map((record, index) => (
@@ -187,8 +184,8 @@ export function VerificationHistory({ onSelectRecord }: VerificationHistoryProps
                   {/* Stats */}
                   <div className="hidden sm:flex items-center gap-6">
                     <div className="text-center">
-                      <p className="text-xs text-muted-foreground">Grade</p>
-                      <p className="font-semibold text-primary">{record.meanGrade}</p>
+                      <p className="text-xs text-muted-foreground">Confidence</p>
+                      <p className="font-semibold text-primary">{(record.ocrConfidence * 100).toFixed(0)}%</p>
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground">Risk</p>
