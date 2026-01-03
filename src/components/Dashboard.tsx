@@ -4,6 +4,7 @@ import { TopBar } from './TopBar';
 import { ForensicScanner } from './ForensicScanner';
 import { DecisionPanel } from './DecisionPanel';
 import { VerificationHistory } from './VerificationHistory';
+import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { OCRResult } from '@/types/ocr';
 
 export function Dashboard() {
@@ -39,16 +40,7 @@ export function Dashboard() {
             </>
           )}
 
-          {activeTab === 'dashboard' && (
-            <div className="flex-1 p-6 flex items-center justify-center">
-              <div className="glass-card p-12 text-center max-w-md">
-                <h2 className="text-2xl font-bold text-foreground mb-2">Dashboard</h2>
-                <p className="text-muted-foreground">
-                  Analytics and statistics module coming soon.
-                </p>
-              </div>
-            </div>
-          )}
+          {activeTab === 'dashboard' && <AnalyticsDashboard />}
 
           {activeTab === 'cases' && (
             <div className="flex-1 p-6 overflow-y-auto">
