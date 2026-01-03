@@ -10,6 +10,7 @@ import { OCRResultsDisplay } from './OCRResultsDisplay';
 import { WebcamCapture, BiometricResult } from './WebcamCapture';
 import { BiometricResultsDisplay } from './BiometricResultsDisplay';
 import { OCRResult } from '@/types/ocr';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ForensicScannerProps {
   onScanComplete: (ocrResult: OCRResult | null, biometricMatch?: number) => void;
@@ -174,6 +175,34 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
     
     const biometricScore = biometricVerifyResult?.matchScore || (biometricCapture ? biometricCapture.livenessScore * 100 : undefined);
     onScanComplete(result, biometricScore);
+
+    // Save verification to database
+    const riskScore = result ? Math.round((1 - result.confidence) * 100) : 50;
+    const verdict = result && result.confidence >= 0.7 ? 'verified' : result ? 'flagged' : 'rejected';
+    let fraudType = null;
+    if (!result?.verificationElements?.hasWatermark && !result?.verificationElements?.hasOfficialStamp) {
+      fraudType = 'Missing Security';
+    } else if (result && result.confidence < 0.5) {
+      fraudType = 'Low Confidence';
+    }
+
+    try {
+      await supabase.from('verifications').insert({
+        document_name: uploadedFile.name,
+        document_type: 'certificate',
+        student_name: result?.structured?.studentName || null,
+        index_number: result?.structured?.indexNumber || null,
+        institution: result?.structured?.schoolName || null,
+        verdict,
+        risk_score: riskScore,
+        fraud_type: fraudType,
+        biometric_score: biometricScore ? Math.round(biometricScore) : null,
+        ocr_confidence: result ? Number((result.confidence * 100).toFixed(2)) : null,
+        validation_passed: result ? result.confidence >= 0.7 : false,
+      });
+    } catch (err) {
+      console.error('Failed to save verification:', err);
+    }
 
     if (result && result.confidence >= 0.7) {
       toast.success('Scan Complete: Document processed successfully', {
