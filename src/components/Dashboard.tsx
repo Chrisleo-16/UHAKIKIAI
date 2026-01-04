@@ -5,6 +5,7 @@ import { ForensicScanner } from './ForensicScanner';
 import { DecisionPanel } from './DecisionPanel';
 import { VerificationHistory } from './VerificationHistory';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
+import { AdminPanel } from './AdminPanel';
 import { OCRResult } from '@/types/ocr';
 
 export function Dashboard() {
@@ -50,6 +51,8 @@ export function Dashboard() {
               </div>
             </div>
           )}
+
+          {activeTab === 'admin' && <AdminPanel />}
 
           {activeTab === 'settings' && (
             <div className="flex-1 p-6 flex items-center justify-center">
