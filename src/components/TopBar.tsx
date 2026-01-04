@@ -1,7 +1,24 @@
-import { Bell, Shield, User, Wifi } from 'lucide-react';
+import { Bell, Shield, User, Wifi, LogOut } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useAuth } from '@/hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export function TopBar() {
+  const { profile, isAdmin, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/auth');
+  };
+
   return (
     <motion.header
       initial={{ y: -20, opacity: 0 }}
@@ -34,21 +51,38 @@ export function TopBar() {
           className="relative p-2 rounded-lg hover:bg-muted transition-colors"
         >
           <Bell className="w-5 h-5 text-muted-foreground" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-danger rounded-full" />
+          <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full" />
         </motion.button>
 
-        {/* Officer Profile */}
-        <div className="flex items-center gap-3 pl-4 border-l border-border">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center border border-primary/30">
-            <User className="w-5 h-5 text-primary" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-foreground">Officer Leo</span>
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Shield className="w-3 h-3" /> Level 5 Access
-            </span>
-          </div>
-        </div>
+        {/* Officer Profile Dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex items-center gap-3 pl-4 border-l border-border hover:opacity-80 transition-opacity">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center border border-primary/30">
+                <User className="w-5 h-5 text-primary" />
+              </div>
+              <div className="flex flex-col text-left">
+                <span className="text-sm font-medium text-foreground">
+                  {profile?.full_name || 'Officer'}
+                </span>
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Shield className="w-3 h-3" /> 
+                  {isAdmin ? 'Admin Access' : 'Officer Access'}
+                </span>
+              </div>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem className="text-muted-foreground text-xs" disabled>
+              {profile?.badge_number || 'No badge assigned'}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </motion.header>
   );

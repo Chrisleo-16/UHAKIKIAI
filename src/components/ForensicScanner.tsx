@@ -11,6 +11,7 @@ import { WebcamCapture, BiometricResult } from './WebcamCapture';
 import { BiometricResultsDisplay } from './BiometricResultsDisplay';
 import { OCRResult } from '@/types/ocr';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 
 interface ForensicScannerProps {
   onScanComplete: (ocrResult: OCRResult | null, biometricMatch?: number) => void;
@@ -90,6 +91,7 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
   const [showOCRResults, setShowOCRResults] = useState(false);
   const [biometricCapture, setBiometricCapture] = useState<BiometricResult | null>(null);
 
+  const { user } = useAuth();
   const { extractText, isExtracting, ocrResult, error: ocrError, reset: resetOCR } = useOCR();
   const { verifyBiometrics, isVerifying: isBiometricVerifying, result: biometricVerifyResult, reset: resetBiometric } = useBiometricVerification();
 
@@ -199,6 +201,7 @@ export function ForensicScanner({ onScanComplete, onReset }: ForensicScannerProp
         biometric_score: biometricScore ? Math.round(biometricScore) : null,
         ocr_confidence: result ? Number((result.confidence * 100).toFixed(2)) : null,
         validation_passed: result ? result.confidence >= 0.7 : false,
+        user_id: user?.id,
       });
     } catch (err) {
       console.error('Failed to save verification:', err);
