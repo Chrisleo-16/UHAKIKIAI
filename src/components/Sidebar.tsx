@@ -1,4 +1,4 @@
-import { Shield, LayoutDashboard, Scan, FolderOpen, Settings, ChevronLeft, ChevronRight, Crown } from 'lucide-react';
+import { Shield, LayoutDashboard, Scan, FolderOpen, Settings, ChevronLeft, ChevronRight, Crown, Key } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
@@ -22,6 +22,7 @@ const navItems: NavItem[] = [
   { icon: LayoutDashboard, label: 'Dashboard', id: 'dashboard' },
   { icon: Scan, label: 'Live Scan', id: 'scan', badge: 3 },
   { icon: FolderOpen, label: 'Case Files', id: 'cases' },
+  { icon: Key, label: 'Get API Key', id: 'api-keys' },
   { icon: Crown, label: 'Admin Panel', id: 'admin', adminOnly: true },
   { icon: Settings, label: 'Settings', id: 'settings' },
 ];

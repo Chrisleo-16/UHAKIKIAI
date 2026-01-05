@@ -6,6 +6,7 @@ import { DecisionPanel } from './DecisionPanel';
 import { VerificationHistory } from './VerificationHistory';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { AdminPanel } from './AdminPanel';
+import { APIKeyManagement } from './APIKeyManagement';
 import { OCRResult } from '@/types/ocr';
 
 export function Dashboard() {
@@ -53,6 +54,8 @@ export function Dashboard() {
           )}
 
           {activeTab === 'admin' && <AdminPanel />}
+
+          {activeTab === 'api-keys' && <APIKeyManagement />}
 
           {activeTab === 'settings' && (
             <div className="flex-1 p-6 flex items-center justify-center">
