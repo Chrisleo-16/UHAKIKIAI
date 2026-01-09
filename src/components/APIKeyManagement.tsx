@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Key, 
@@ -14,7 +14,9 @@ import {
   Shield,
   Code,
   AlertTriangle,
-  ExternalLink
+  ExternalLink,
+  Loader2,
+  ServerCrash
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,57 +26,115 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/useAuth';
+import { API_BASE_URL, generateAPIKey, registerCompany } from '@/lib/api';
 
 interface APIKey {
   id: string;
   name: string;
   key: string;
+  prefix: string;
   createdAt: Date;
   lastUsed: Date | null;
   requestCount: number;
   status: 'active' | 'revoked';
 }
 
-// Generate a random API key
-const generateAPIKey = (): string => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  const prefix = 'uhk_live_';
-  let key = prefix;
-  for (let i = 0; i < 48; i++) {
-    key += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return key;
-};
-
 export function APIKeyManagement() {
-  const [apiKeys, setApiKeys] = useState<APIKey[]>([
-    {
-      id: '1',
-      name: 'Production Key',
-      key: 'uhk_live_aBcDeFgHiJkLmNoPqRsTuVwXyZ123456789012345678',
-      createdAt: new Date('2024-01-15'),
-      lastUsed: new Date('2024-01-18'),
-      requestCount: 1247,
-      status: 'active'
-    }
-  ]);
+  const { user, profile } = useAuth();
+  const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
   const [newKeyName, setNewKeyName] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<string | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [backendStatus, setBackendStatus] = useState<'online' | 'offline' | 'checking'>('checking');
 
-  const handleCreateKey = () => {
+  // Check backend status on mount
+  useEffect(() => {
+    checkBackendStatus();
+  }, []);
+
+  const checkBackendStatus = async () => {
+    setBackendStatus('checking');
+    try {
+      const response = await fetch(`${API_BASE_URL}/docs`, { method: 'HEAD' });
+      setBackendStatus(response.ok ? 'online' : 'offline');
+    } catch {
+      setBackendStatus('offline');
+    }
+  };
+
+  const handleRegisterAndCreateKey = async () => {
     if (!newKeyName.trim()) {
       toast.error('Please enter a name for your API key');
       return;
     }
 
-    const newKey = generateAPIKey();
+    if (!user?.email) {
+      toast.error('You must be logged in to create an API key');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // First, register the company if not already registered
+      try {
+        await registerCompany(newKeyName, user.email);
+      } catch (error: any) {
+        // Company might already exist, continue to generate key
+        if (!error.message.includes('already')) {
+          console.log('Registration note:', error.message);
+        }
+      }
+
+      // Generate the API key
+      const response = await generateAPIKey(user.email);
+      
+      const newApiKey: APIKey = {
+        id: Date.now().toString(),
+        name: newKeyName,
+        key: response.api_key,
+        prefix: response.api_key.substring(0, 10),
+        createdAt: new Date(),
+        lastUsed: null,
+        requestCount: 0,
+        status: 'active'
+      };
+
+      setApiKeys(prev => [newApiKey, ...prev]);
+      setNewlyCreatedKey(response.api_key);
+      setNewKeyName('');
+      toast.success('API key created successfully via Python backend!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to create API key');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fallback: Generate key locally if backend is offline
+  const handleCreateKeyLocal = () => {
+    if (!newKeyName.trim()) {
+      toast.error('Please enter a name for your API key');
+      return;
+    }
+
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const prefix = 'uh_live_';
+    let key = prefix;
+    for (let i = 0; i < 48; i++) {
+      key += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
     const newApiKey: APIKey = {
       id: Date.now().toString(),
       name: newKeyName,
-      key: newKey,
+      key: key,
+      prefix: key.substring(0, 10),
       createdAt: new Date(),
       lastUsed: null,
       requestCount: 0,
@@ -82,9 +142,17 @@ export function APIKeyManagement() {
     };
 
     setApiKeys(prev => [newApiKey, ...prev]);
-    setNewlyCreatedKey(newKey);
+    setNewlyCreatedKey(key);
     setNewKeyName('');
-    toast.success('API key created successfully');
+    toast.success('API key created locally (backend offline)');
+  };
+
+  const handleCreateKey = () => {
+    if (backendStatus === 'online') {
+      handleRegisterAndCreateKey();
+    } else {
+      handleCreateKeyLocal();
+    }
   };
 
   const handleCopyKey = async (key: string, keyId: string) => {
@@ -154,101 +222,142 @@ export function APIKeyManagement() {
             </p>
           </div>
 
-          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-            <DialogTrigger asChild>
-              <Button className="bg-primary hover:bg-primary/90 gap-2">
-                <Plus className="w-4 h-4" />
-                Create New Key
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Create New API Key</DialogTitle>
-                <DialogDescription>
-                  Create a new API key to authenticate external verification requests.
-                </DialogDescription>
-              </DialogHeader>
+          <div className="flex items-center gap-3">
+            {/* Backend Status Indicator */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-border/50">
+              {backendStatus === 'checking' ? (
+                <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+              ) : backendStatus === 'online' ? (
+                <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+              ) : (
+                <div className="w-2 h-2 rounded-full bg-warning" />
+              )}
+              <span className="text-xs text-muted-foreground">
+                Python API: {backendStatus === 'checking' ? 'Checking...' : backendStatus}
+              </span>
+            </div>
 
-              {!newlyCreatedKey ? (
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="keyName">Key Name</Label>
-                    <Input
-                      id="keyName"
-                      placeholder="e.g., Production, Development, Partner Integration"
-                      value={newKeyName}
-                      onChange={(e) => setNewKeyName(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      A descriptive name to help you identify this key later
-                    </p>
-                  </div>
+            <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+              <DialogTrigger asChild>
+                <Button className="bg-primary hover:bg-primary/90 gap-2">
+                  <Plus className="w-4 h-4" />
+                  Create New Key
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Create New API Key</DialogTitle>
+                  <DialogDescription>
+                    Create a new API key to authenticate external verification requests.
+                    {backendStatus === 'online' && (
+                      <span className="block mt-1 text-primary">
+                        Connected to Python backend at {API_BASE_URL}
+                      </span>
+                    )}
+                  </DialogDescription>
+                </DialogHeader>
 
-                  <div className="p-3 bg-warning/10 border border-warning/20 rounded-lg flex gap-3">
-                    <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
-                    <div className="text-sm">
-                      <p className="font-medium text-warning">Security Notice</p>
-                      <p className="text-muted-foreground mt-1">
-                        Your API key will only be shown once. Make sure to copy and store it securely.
+                {!newlyCreatedKey ? (
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="keyName">Key Name / Company Name</Label>
+                      <Input
+                        id="keyName"
+                        placeholder="e.g., Production, Development, Partner Integration"
+                        value={newKeyName}
+                        onChange={(e) => setNewKeyName(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        A descriptive name to help you identify this key later
                       </p>
                     </div>
+
+                    {backendStatus === 'offline' && (
+                      <div className="p-3 bg-warning/10 border border-warning/20 rounded-lg flex gap-3">
+                        <ServerCrash className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                        <div className="text-sm">
+                          <p className="font-medium text-warning">Backend Offline</p>
+                          <p className="text-muted-foreground mt-1">
+                            The Python API is not reachable. Key will be generated locally.
+                            Start your FastAPI server at {API_BASE_URL}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="p-3 bg-warning/10 border border-warning/20 rounded-lg flex gap-3">
+                      <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                      <div className="text-sm">
+                        <p className="font-medium text-warning">Security Notice</p>
+                        <p className="text-muted-foreground mt-1">
+                          Your API key will only be shown once. Make sure to copy and store it securely.
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="space-y-4 py-4">
-                  <div className="p-4 bg-accent/50 rounded-lg border border-border">
-                    <Label className="text-xs text-muted-foreground mb-2 block">Your New API Key</Label>
-                    <div className="flex items-center gap-2">
-                      <code className="flex-1 text-sm font-mono bg-background p-3 rounded-md border break-all">
-                        {newlyCreatedKey}
-                      </code>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => handleCopyKey(newlyCreatedKey, 'new')}
-                      >
-                        {copiedKeyId === 'new' ? (
-                          <Check className="w-4 h-4 text-primary" />
+                ) : (
+                  <div className="space-y-4 py-4">
+                    <div className="p-4 bg-accent/50 rounded-lg border border-border">
+                      <Label className="text-xs text-muted-foreground mb-2 block">Your New API Key</Label>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 text-sm font-mono bg-background p-3 rounded-md border break-all">
+                          {newlyCreatedKey}
+                        </code>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => handleCopyKey(newlyCreatedKey, 'new')}
+                        >
+                          {copiedKeyId === 'new' ? (
+                            <Check className="w-4 h-4 text-primary" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg flex gap-3">
+                      <Shield className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                      <div className="text-sm">
+                        <p className="font-medium text-destructive">Important</p>
+                        <p className="text-muted-foreground mt-1">
+                          This key won't be shown again. Copy it now and store it in a secure location.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <DialogFooter>
+                  {!newlyCreatedKey ? (
+                    <>
+                      <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+                        Cancel
+                      </Button>
+                      <Button onClick={handleCreateKey} disabled={isLoading}>
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                            Creating...
+                          </>
                         ) : (
-                          <Copy className="w-4 h-4" />
+                          'Create Key'
                         )}
                       </Button>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg flex gap-3">
-                    <Shield className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-                    <div className="text-sm">
-                      <p className="font-medium text-destructive">Important</p>
-                      <p className="text-muted-foreground mt-1">
-                        This key won't be shown again. Copy it now and store it in a secure location.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <DialogFooter>
-                {!newlyCreatedKey ? (
-                  <>
-                    <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-                      Cancel
+                    </>
+                  ) : (
+                    <Button onClick={() => {
+                      setShowCreateDialog(false);
+                      setNewlyCreatedKey(null);
+                    }}>
+                      Done
                     </Button>
-                    <Button onClick={handleCreateKey}>
-                      Create Key
-                    </Button>
-                  </>
-                ) : (
-                  <Button onClick={() => {
-                    setShowCreateDialog(false);
-                    setNewlyCreatedKey(null);
-                  }}>
-                    Done
-                  </Button>
-                )}
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                  )}
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </motion.div>
 
         {/* Stats Cards */}
@@ -430,25 +539,25 @@ export function APIKeyManagement() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Code className="w-5 h-5 text-primary" />
-                  Quick Start Guide
+                  Quick Start Guide - Python Backend
                 </CardTitle>
                 <CardDescription>
-                  Integrate UhakikiAI document verification into your application
+                  Integrate UhakikiAI document verification using your Python FastAPI backend
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Base URL */}
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Base URL</Label>
+                  <Label className="text-sm font-medium">Base URL (Your FastAPI Server)</Label>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 text-sm font-mono bg-muted/50 px-3 py-2 rounded-md border border-border/50">
-                      https://api.uhakiki.ai/v1
+                      {API_BASE_URL}
                     </code>
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => {
-                        navigator.clipboard.writeText('https://api.uhakiki.ai/v1');
+                        navigator.clipboard.writeText(API_BASE_URL);
                         toast.success('Copied to clipboard');
                       }}
                     >
@@ -461,22 +570,43 @@ export function APIKeyManagement() {
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">Authentication</Label>
                   <p className="text-sm text-muted-foreground mb-2">
-                    Include your API key in the Authorization header:
+                    Include your API key in the X-API-Key header:
                   </p>
                   <pre className="bg-[#1e1e2e] text-[#cdd6f4] p-4 rounded-lg text-sm font-mono overflow-x-auto border border-border/50">
-{`Authorization: Bearer uhk_live_your_api_key`}
+{`X-API-Key: uh_live_your_api_key`}
                   </pre>
                 </div>
 
-                {/* Example Request */}
+                {/* Example Request - cURL */}
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">Verify Document (cURL)</Label>
                   <pre className="bg-[#1e1e2e] text-[#cdd6f4] p-4 rounded-lg text-sm font-mono overflow-x-auto border border-border/50">
-{`curl -X POST https://api.uhakiki.ai/v1/verify \\
-  -H "Authorization: Bearer uhk_live_your_api_key" \\
-  -H "Content-Type: multipart/form-data" \\
-  -F "document=@/path/to/document.pdf" \\
-  -F "type=certificate"`}
+{`curl -X POST ${API_BASE_URL}/v1/verify_document \\
+  -H "X-API-Key: uh_live_your_api_key" \\
+  -F "file=@/path/to/certificate.jpg"`}
+                  </pre>
+                </div>
+
+                {/* Python Example */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Python</Label>
+                  <pre className="bg-[#1e1e2e] text-[#cdd6f4] p-4 rounded-lg text-sm font-mono overflow-x-auto border border-border/50">
+{`import requests
+
+API_KEY = "uh_live_your_api_key"
+API_URL = "${API_BASE_URL}/v1/verify_document"
+
+with open("certificate.jpg", "rb") as f:
+    response = requests.post(
+        API_URL,
+        headers={"X-API-Key": API_KEY},
+        files={"file": f}
+    )
+
+result = response.json()
+print(f"Status: {result['status']}")
+print(f"Score: {result['score']}")
+print(f"Flags: {result['flags']}")`}
                   </pre>
                 </div>
 
@@ -484,21 +614,21 @@ export function APIKeyManagement() {
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">JavaScript / TypeScript</Label>
                   <pre className="bg-[#1e1e2e] text-[#cdd6f4] p-4 rounded-lg text-sm font-mono overflow-x-auto border border-border/50">
-{`const response = await fetch('https://api.uhakiki.ai/v1/verify', {
+{`const formData = new FormData();
+formData.append('file', fileInput.files[0]);
+
+const response = await fetch('${API_BASE_URL}/v1/verify_document', {
   method: 'POST',
   headers: {
-    'Authorization': 'Bearer uhk_live_your_api_key',
-    'Content-Type': 'application/json'
+    'X-API-Key': 'uh_live_your_api_key'
   },
-  body: JSON.stringify({
-    document_url: 'https://example.com/document.pdf',
-    type: 'certificate',
-    biometric_check: true
-  })
+  body: formData
 });
 
 const result = await response.json();
-console.log(result.verification_status);`}
+console.log(result.status);  // "VERIFIED" | "FLAGGED" | "ERROR"
+console.log(result.score);   // 0-100
+console.log(result.flags);   // Array of fraud indicators`}
                   </pre>
                 </div>
 
@@ -507,27 +637,54 @@ console.log(result.verification_status);`}
                   <Label className="text-sm font-medium">Response Example</Label>
                   <pre className="bg-[#1e1e2e] text-[#cdd6f4] p-4 rounded-lg text-sm font-mono overflow-x-auto border border-border/50">
 {`{
-  "id": "ver_1234567890",
-  "status": "completed",
-  "verification_status": "authentic",
-  "confidence_score": 0.97,
-  "document_type": "certificate",
-  "extracted_data": {
-    "name": "John Doe",
-    "institution": "University of Nairobi",
-    "date_issued": "2024-01-15"
-  },
-  "fraud_indicators": [],
-  "biometric_match": 0.94,
-  "created_at": "2024-01-18T10:30:00Z"
+  "status": "VERIFIED",
+  "score": 95,
+  "flags": [],
+  "data": {
+    "name": "John Kamau",
+    "institution": "Kenya National Examinations Council"
+  }
+}
+
+// Flagged Response:
+{
+  "status": "FLAGGED",
+  "score": 40,
+  "flags": [
+    "Suspected Synthetic Image (Low Noise)",
+    "Grade Mismatch (Expected A-)"
+  ],
+  "data": {
+    "name": "Jane Doe",
+    "institution": "Unknown"
+  }
 }`}
                   </pre>
                 </div>
 
+                {/* Running the Backend */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Running Your Python Backend</Label>
+                  <pre className="bg-[#1e1e2e] text-[#cdd6f4] p-4 rounded-lg text-sm font-mono overflow-x-auto border border-border/50">
+{`# Install dependencies
+pip install -r requirements.txt
+
+# Run the server
+python main.py
+
+# Or with uvicorn
+uvicorn main:app --reload --host 0.0.0.0 --port 8000`}
+                  </pre>
+                </div>
+
                 <div className="pt-4 border-t border-border/50">
-                  <Button variant="outline" className="gap-2">
+                  <Button 
+                    variant="outline" 
+                    className="gap-2"
+                    onClick={() => window.open(`${API_BASE_URL}/docs`, '_blank')}
+                  >
                     <ExternalLink className="w-4 h-4" />
-                    View Full API Documentation
+                    View FastAPI Swagger Docs
                   </Button>
                 </div>
               </CardContent>
