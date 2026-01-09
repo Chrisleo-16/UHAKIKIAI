@@ -1,10 +1,9 @@
 fastapi
 uvicorn
 supabase
-python-multipart
+python-dotenv
 passlib[bcrypt]
-easyocr
 opencv-python-headless
 numpy
-python-dotenv
-pillow
+easyocr
+python-multipart
