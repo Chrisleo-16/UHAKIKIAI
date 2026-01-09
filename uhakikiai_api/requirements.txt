@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+supabase
+python-multipart
+passlib[bcrypt]
+easyocr
+opencv-python-headless
+numpy
+python-dotenv
+pillow
