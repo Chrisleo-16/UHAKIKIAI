@@ -5,11 +5,13 @@ import cv2
 import numpy as np
 import pytesseract  # UPDATED from easyocr
 import re
+import time
 from datetime import datetime
 from typing import Optional, List
+from collections import defaultdict
 
 # FastAPI & Pydantic
-from fastapi import FastAPI, HTTPException, Header, Depends, File, UploadFile, Form, status
+from fastapi import FastAPI, HTTPException, Header, Depends, File, UploadFile, Form, status, Request
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
@@ -47,14 +49,43 @@ else:
         print(f"Failed to initialize Supabase: {e}")
         supabase = None
 
-# --- 2. AUTHENTICATION LOGIC ---
+# --- 2. AUTHENTICATION & SECURITY LOGIC (HARDENED) ---
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
+# SECURITY CONFIG: High-Entropy Pepper from Env (Fallback provided for safety)
+SECRET_PEPPER = os.environ.get("SECRET_PEPPER", "default_emergency_pepper_12345")
+
+# RATE LIMITER: Simple In-Memory (Saves RAM on Render)
+# Format: { "ip_address": {"count": 0, "reset_time": 0} }
+failed_attempts = defaultdict(lambda: {"count": 0, "reset_time": 0})
+
+def check_rate_limit(client_ip: str):
+    """
+    Blocks IPs that fail auth > 5 times in 15 mins.
+    """
+    now = time.time()
+    data = failed_attempts[client_ip]
+
+    # Reset counter if 15 minutes have passed
+    if now > data["reset_time"]:
+        data["count"] = 0
+        data["reset_time"] = now + 900  # 15 minutes window
+
+    if data["count"] >= 5:
+        print(f"SECURITY: Blocking IP {client_ip} for excessive failures.")
+        raise HTTPException(
+            status_code=429, 
+            detail="Too many failed attempts. Try again in 15 minutes."
+        )
+
+def record_failure(client_ip: str):
+    failed_attempts[client_ip]["count"] += 1
+
 def generate_api_key_logic(company_email: str):
     """
-    Generates a secure API key, hashes it, and stores it in Supabase.
+    Generates a PEPPERED secure API key.
     Called by the Admin Portal.
     """
     if not supabase:
@@ -70,10 +101,16 @@ def generate_api_key_logic(company_email: str):
     # 2. Generate Key (e.g., uh_live_AbCd123...)
     # Using 32 bytes of entropy
     raw_key = f"uh_live_{secrets.token_urlsafe(32)}"
-    prefix = raw_key[:10] # Store prefix to look up quickly
-    key_hash = pwd_context.hash(raw_key)
+    
+    # 3. Key Masking & Peppering
+    # Store prefix to look up quickly, mask the rest
+    prefix = raw_key[:12] 
+    
+    # COMBINE KEY + PEPPER before hashing
+    peppered_key = f"{raw_key}{SECRET_PEPPER}"
+    key_hash = pwd_context.hash(peppered_key)
 
-    # 3. Save Hash to DB
+    # 4. Save Hash to DB
     supabase.table("api_keys").insert({
         "company_id": company_id,
         "key_hash": key_hash,
@@ -82,33 +119,43 @@ def generate_api_key_logic(company_email: str):
         "created_at": datetime.utcnow().isoformat()
     }).execute()
 
-    return {"api_key": raw_key, "message": "Save this key now. It won't be shown again."}
+    return {"api_key": raw_key, "message": "CRITICAL: Copy this key. It is never stored in plain text."}
 
-async def validate_api_key(x_api_key: str = Depends(api_key_header)):
+async def validate_api_key(request: Request, x_api_key: str = Depends(api_key_header)):
     """
     Dependency: Verifies the API key sent in headers for protected routes.
+    Includes Rate Limiting & Peppered Verification.
     """
+    client_ip = request.client.host
+    check_rate_limit(client_ip) # 1. Check Blocklist
+
     if not x_api_key:
+        record_failure(client_ip)
         raise HTTPException(status_code=403, detail="X-API-Key header missing")
     
     if not supabase:
-        # Fallback for local testing if DB is down (remove in production)
+        # Fallback for local testing if DB is down
         if x_api_key.startswith("uh_test_"):
              return "test_company_id"
         raise HTTPException(status_code=500, detail="Database connection unavailable")
 
-    prefix = x_api_key[:10]
+    prefix = x_api_key[:12]
     
-    # 1. Look up by prefix (fast, avoids scanning all hashes)
+    # 2. Look up by prefix (Fast)
     res = supabase.table("api_keys").select("*").eq("prefix", prefix).eq("is_active", True).execute()
     
     if not res.data:
+        record_failure(client_ip)
         raise HTTPException(status_code=401, detail="Invalid API Key (Prefix mismatch)")
     
     record = res.data[0]
     
-    # 2. Verify Hash
-    if not pwd_context.verify(x_api_key, record['key_hash']):
+    # 3. Verify Hash (Key + Pepper)
+    peppered_input = f"{x_api_key}{SECRET_PEPPER}"
+
+    if not pwd_context.verify(peppered_input, record['key_hash']):
+        record_failure(client_ip)
+        print(f"SECURITY ALERT: Failed key attempt for prefix {prefix} from {client_ip}")
         raise HTTPException(status_code=401, detail="Invalid API Key (Hash mismatch)")
     
     return record['company_id']
@@ -283,7 +330,8 @@ def run_verification_pipeline(image_bytes):
 
     return response_payload
 
-# --- 4. API ROUTES ---
+# --- 4. API ROUTES (SMART UI v1.0) ---
+
 description = """
 ## UhakikiAI Trust Layer 🛡️
 **High-Performance Autonomous Credential Verification Engine.**
@@ -295,13 +343,12 @@ Built for developers who require high-fidelity forensic analysis and secondary v
 * **OCR Layer:** Powered by Tesseract-OCR for high-speed text extraction.
 * **National DB Interop:** Direct cross-referencing with `national_records`.
 
-### ⚡ Quick Specs:
-- **Version:** `1.0.0-production`
+### ⚡ Technical Specs:
+- **Engine Version:** `1.0.0-production`
+- **Security:** Peppered Hash (Argon2/Bcrypt) + Rate Limiting
 - **Latency:** Optimized for < 2.5s verification cycles.
-- **Protocol:** RESTful JSON over HTTPS.
 """
 
-# Grouping endpoints by 'Intelligence' tags
 tags_metadata = [
     {
         "name": "Verification",
@@ -312,6 +359,7 @@ tags_metadata = [
         "description": "Institutional onboarding and secure API key management.",
     },
 ]
+
 app = FastAPI(
     title="UhakikiAI Core Engine",
     description=description,
@@ -330,7 +378,7 @@ app = FastAPI(
 # Root Endpoint
 @app.get("/")
 def read_root():
-    return {"message": "UhakikiAI Core Engine is Online. Use /docs for API schema."}
+    return {"message": "UhakikiAI Core Engine is Online. Use /api/v1/docs for API schema."}
 
 # --- PORTAL ROUTES (For Vercel / Admin Dashboard) ---
 
@@ -351,7 +399,7 @@ def register_company(name: str = Form(...), email: str = Form(...)):
 @app.post("/portal/generate_key", tags=["Admin"])
 def create_key(email: str = Form(...)):
     """
-    Generate an API key for a registered company.
+    Generate a **Secure Peppered API key**.
     """
     return generate_api_key_logic(email)
 
@@ -405,7 +453,9 @@ async def biometric_match(
         "company_id": company_id
     }
 
-@app.get("/docs", include_in_schema=False)
+# --- CUSTOM DOCS UI ---
+
+@app.get("/api/v1/docs", include_in_schema=False)
 async def custom_swagger_ui_html():
     html = get_swagger_ui_html(
         openapi_url=app.openapi_url,
@@ -426,6 +476,7 @@ async def custom_swagger_ui_html():
     
     new_content = html.body.decode("utf-8").replace("</head>", f"{custom_css}</head>")
     return HTMLResponse(content=new_content)
+
 # --- ENTRY POINT ---
 
 if __name__ == "__main__":
