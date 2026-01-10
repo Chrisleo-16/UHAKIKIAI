@@ -27,5 +27,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # 6. Use the Render-assigned port and the proper 'exec' form for CMD
-# This ensures FastAPI can shut down gracefully
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}"]
+# Replace the old line with this one
+CMD ["sh", "-c", "uvicorn uhakikiai_full:app --host 0.0.0.0 --port ${PORT:-10000}"]
