@@ -60,7 +60,7 @@ export function APIKeyManagement() {
   const checkBackendStatus = async () => {
     setBackendStatus('checking');
     try {
-      const response = await fetch(`${API_BASE_URL}/docs`, { method: 'HEAD' });
+      const response = await fetch(`${API_BASE_URL}`, { method: 'GET' });
       setBackendStatus(response.ok ? 'online' : 'offline');
     } catch {
       setBackendStatus('offline');

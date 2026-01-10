@@ -1,7 +1,7 @@
 // Python Backend API Configuration
-// Update this URL to point to your deployed FastAPI backend
+// Production URL for the UhakikiAI FastAPI backend on Render
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+export const API_BASE_URL = 'https://uhakikiai.onrender.com';
 
 interface RegisterCompanyResponse {
   id: string;
