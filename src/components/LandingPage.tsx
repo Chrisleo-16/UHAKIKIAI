@@ -107,7 +107,7 @@ export function LandingPage() {
             <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Features</a>
             <a href="#api" className="text-sm text-muted-foreground hover:text-foreground transition-colors">API</a>
             <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Pricing</a>
-            <a href="https://uhakikiai.onrender.com/docs" target="_blank" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Documentation</a>
+            <a href="https://uhakikiai.onrender.com/api/v1/docs" target="_blank" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Documentation</a>
           </div>
 
           <div className="flex items-center gap-3">
@@ -158,7 +158,7 @@ export function LandingPage() {
               <Button 
                 size="lg" 
                 variant="outline"
-                onClick={() => window.open('https://uhakikiai.onrender.com/docs', '_blank')}
+                onClick={() => window.open('https://uhakikiai.onrender.com/api/v1/docs', '_blank')}
                 className="gap-2 px-8 h-14 text-lg"
               >
                 <Play className="w-5 h-5" /> View API Docs
@@ -252,7 +252,7 @@ export function LandingPage() {
           >
             <Button 
               size="lg"
-              onClick={() => window.open('https://uhakikiai.onrender.com/docs', '_blank')}
+              onClick={() => window.open('https://uhakikiai.onrender.com/api/v1/docs', '_blank')}
               className="bg-primary hover:bg-primary/90 gap-2"
             >
               View Full API Documentation <ArrowRight className="w-4 h-4" />
@@ -378,7 +378,7 @@ export function LandingPage() {
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
               <a href="#" className="hover:text-foreground transition-colors">Privacy</a>
               <a href="#" className="hover:text-foreground transition-colors">Terms</a>
-              <a href="https://uhakikiai.onrender.com/docs" target="_blank" className="hover:text-foreground transition-colors">API Docs</a>
+              <a href="https://uhakikiai.onrender.com/api/v1/docs" target="_blank" className="hover:text-foreground transition-colors">API Docs</a>
               <a href="mailto:support@uhakiki.ai" className="hover:text-foreground transition-colors">Contact</a>
             </div>
           </div>
