@@ -1,73 +1,116 @@
-# Welcome to your Lovable project
+<p align="center">
+  <img src="https://tpwxyhhcyyamdumnjmjb.supabase.co/storage/v1/object/public/public-assets/uhakikiai-high-resolution-logo-transparent.svg" alt="UhakikiAI Logo" width="300">
+</p>
+UhakikiAI Core Engine 🛡️
+The Trust Layer for African Credentials.
 
-## Project info
+UhakikiAI is a high-performance, autonomous verification engine designed to validate educational and identity documents in real-time. It combines Computer Vision (OpenCV), Optical Character Recognition (Tesseract), and Generative Forensics to detect forgeries and cross-reference data with national registries.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+🚀 Key Features
+🔍 Intelligence Layer
+Generative Forensics: Uses Error Level Analysis (ELA) and noise sigma detection to flag digitally manipulated images (deepfakes/Photoshop).
 
-## How can I edit this code?
+Smart OCR: Powered by pytesseract to extract Index Numbers, Names, and Grades from noisy document images.
 
-There are several ways of editing your application.
+Agentic Verification: An autonomous logic layer that weighs forensic evidence against data consistency to calculate a dynamic risk_score (0-100).
 
-**Use Lovable**
+National DB Sync: Direct integration with Supabase to cross-reference extracted data against the national_records table.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+🔐 Bank-Grade Security
+Peppered Hashing: API keys are secured using Argon2/Bcrypt combined with a high-entropy server-side SECRET_PEPPER. Keys are never stored in plain text.
 
-Changes made via Lovable will be committed automatically to this repo.
+In-Memory Rate Limiter: Protects against brute-force attacks by blocking IP addresses that fail authentication >5 times in a 15-minute window.
 
-**Use your preferred IDE**
+Key Masking: The database only stores a partial prefix (uh_live_...) and the hash, ensuring zero-knowledge storage.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+🛠️ Technology Stack
+Core: Python 3.9+, FastAPI
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+Vision: OpenCV, NumPy, Pillow, Tesseract-OCR
 
-Follow these steps:
+Database: Supabase (PostgreSQL + RLS)
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
+Security: Passlib (Bcrypt), Python Secrets
+
+Deployment: Render / Vercel
+
+💻 Local Development Setup
+Follow these steps to run the engine locally.
+
+Prerequisites
+Python 3.9 or higher
+
+Tesseract OCR installed on your system.
+
+1. Clone the Repository
+Bash
+
 git clone <YOUR_GIT_URL>
+cd uhakikiai-engine
+2. Install Dependencies
+Bash
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+pip install -r requirements.txt
+3. Configure Environment Variables
+Create a .env file in the root directory and add your credentials:
 
-# Step 3: Install the necessary dependencies.
-npm i
+Ini, TOML
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+# Database Config
+SUPABASE_URL="https://your-project.supabase.co"
+SUPABASE_KEY="your-service-role-key"
 
-**Edit a file directly in GitHub**
+# Security Config (CRITICAL)
+# Generate a long random string for this
+SECRET_PEPPER="your_super_secret_random_pepper_string_here"
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+# Server Config
+PORT=8000
+4. Run the Engine
+Bash
 
-**Use GitHub Codespaces**
+# Start the server with hot-reloading
+uvicorn main:app --reload
+The API will be live at http://localhost:8000.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+📚 API Documentation
+Once the server is running, you can access the professional interactive documentation:
 
-## What technologies are used for this project?
+Swagger UI: http://localhost:8000/api/v1/docs - Test endpoints directly.
 
-This project is built with:
+ReDoc: http://localhost:8000/api/v1/redoc - Read technical specs.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+🔒 Security Architecture
+API Key Generation
+When a company is onboarded via /portal/generate_key, the system:
 
-## How can I deploy this project?
+Generates a 32-byte high-entropy random string.
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+Appends the SECRET_PEPPER from environment variables.
 
-## Can I connect a custom domain to my Lovable project?
+Hashes the result using bcrypt.
 
-Yes, you can!
+Stores only the hash and a short prefix in the database.
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+Request Validation
+Every request to /v1/ endpoints passes through the validate_api_key dependency:
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+IP Check: Is the client IP in the temporary blocklist?
+
+Prefix Lookup: Finds the key metadata efficiently.
+
+Peppered Verification: Re-combines the input key + Pepper to verify against the stored hash.
+
+☁️ Deployment (Render)
+Push your code to GitHub.
+
+Create a new Web Service on Render.
+
+Set the Build Command: pip install -r requirements.txt
+
+Set the Start Command: uvicorn main:app --host 0.0.0.0 --port $PORT
+
+Important: Go to the "Environment" tab in Render and add your SUPABASE_URL, SUPABASE_KEY, and SECRET_PEPPER.
+
+📄 License
+This project is proprietary. Unauthorized copying or distribution of the forensic logic is strictly prohibited.
