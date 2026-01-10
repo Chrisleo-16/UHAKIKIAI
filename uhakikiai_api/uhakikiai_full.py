@@ -3,7 +3,7 @@ import secrets
 import uvicorn
 import cv2
 import numpy as np
-import easyocr
+import pytesseract  # UPDATED from easyocr
 import re
 from datetime import datetime
 from typing import Optional, List
@@ -113,19 +113,19 @@ async def validate_api_key(x_api_key: str = Depends(api_key_header)):
 
 # --- 3. CORE ENGINE & INTELLIGENCE ---
 
-# Initialize OCR Reader (loads model into memory once)
+# UPDATED: Initialize Tesseract Check (Lighter than EasyOCR)
 try:
-    print("Loading OCR Model...")
-    reader = easyocr.Reader(['en']) 
+    print("Loading OCR Engine (Tesseract)...")
+    # Verify tesseract is installed
+    pytesseract.get_tesseract_version()
     print("OCR Model Loaded.")
 except Exception as e:
-    print(f"Warning: EasyOCR failed to load. OCR features will error. {e}")
-    reader = None
+    print(f"Warning: OCR Engine failed to load. {e}")
 
 def run_forensics(img_cv):
     """
     Advanced Step 1: Detect Digital Manipulation (Generative AI Artifacts)
-    Corresponds to 'Generative Document Forgery Detection'[cite: 32].
+    Corresponds to 'Generative Document Forgery Detection'.
     """
     flags = []
     score_penalty = 0
@@ -135,7 +135,7 @@ def run_forensics(img_cv):
     gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
     noise_sigma = np.std(gray)
     
-    # Thresholds would be tuned via ML in production
+    # Thresholds tuned for MVP
     if noise_sigma < 5.0: 
         flags.append("High Probability of Synthetic Generation (Unnatural smoothness)")
         score_penalty += 40
@@ -146,25 +146,28 @@ def run_forensics(img_cv):
     # B. Document Structure Check (Size/Ratio)
     height, width, _ = img_cv.shape
     aspect_ratio = width / height
-    # Standard A4/Card ratios check could go here
     
     return flags, score_penalty
 
 def run_ocr_extraction(img_cv):
     """
-    Step 2: Extract Text Data
+    Step 2: Extract Text Data (UPDATED to Tesseract)
     """
-    if reader is None:
-        return "", []
+    # Preprocessing to help Tesseract
+    gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
+    _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
     
-    # Detail=0 gives simple list of strings
-    results = reader.readtext(img_cv, detail=0)
-    full_text = " ".join(results).upper()
-    return full_text, results
+    try:
+        # Extract text
+        full_text = pytesseract.image_to_string(thresh).upper()
+        return full_text, []
+    except Exception as e:
+        print(f"OCR Error: {e}")
+        return "", []
 
 def agentic_verification_logic(extracted_text, forensics_flags, forensics_penalty):
     """
-    Step 3: The 'Autonomous Agent' logic[cite: 37].
+    Step 3: The 'Autonomous Agent' logic.
     The agent weighs forensic evidence against data integrity.
     """
     verdict = {
@@ -178,7 +181,7 @@ def agentic_verification_logic(extracted_text, forensics_flags, forensics_penalt
     if forensics_flags:
         verdict["reasoning"].extend(forensics_flags)
 
-    # Agent Input: Contextual Logic (NLP-lite) [cite: 54]
+    # Agent Input: Contextual Logic (NLP-lite)
     # Check for keywords expected in Kenyan Academic Documents
     required_keywords = ["KENYA", "CERTIFICATE", "EXAMINATION"]
     # Check how many are missing
@@ -189,8 +192,8 @@ def agentic_verification_logic(extracted_text, forensics_flags, forensics_penalt
         verdict["reasoning"].append(f"Document lacks standard terminology. Found: {found_keywords}")
 
     # Regex Extraction for Index Number (The Key Identifier)
-    # Looking for sequence of 9-11 digits
-    index_match = re.search(r'\d{9,11}', extracted_text)
+    # Updated regex to handle standard Kenyan ID/Index patterns
+    index_match = re.search(r'\d{8,12}', extracted_text)
     index_number = None
 
     if index_match:
@@ -233,7 +236,7 @@ def run_verification_pipeline(image_bytes):
     response_payload["risk_score"] = agent_verdict["risk_score"]
     response_payload["details"] = agent_verdict["reasoning"]
 
-    # 5. National DB Cross-Reference (The 'Source of Truth') [cite: 41]
+    # 5. National DB Cross-Reference (The 'Source of Truth')
     # Only proceed if we found an index number and risk isn't already 100
     if index_number and response_payload["risk_score"] < 80:
         if supabase:
@@ -282,7 +285,7 @@ def run_verification_pipeline(image_bytes):
 
 app = FastAPI(
     title="UhakikiAI Verification API",
-    description="The Trust Layer for African Credentials. Integrates Generative AI forensics and National Registry checks.",
+    description="The Trust Layer for African Credentials.",
     version="2.0"
 )
 
@@ -323,9 +326,6 @@ async def verify_document_endpoint(
 ):
     """
     **The Primary Endpoint.**
-    
-    Input: Image file (Scan of KCSE cert, National ID, etc.)
-    Output: JSON verdict including Risk Score, Fraud Flags, and Verified Data.
     """
     # 1. Validate File Type
     if file.content_type not in ["image/jpeg", "image/png", "image/jpg"]:
@@ -336,7 +336,7 @@ async def verify_document_endpoint(
     # 2. Run the Engine
     result = run_verification_pipeline(content)
     
-    # 3. Logging & Billing (Async recommended for production)
+    # 3. Logging & Billing
     if supabase:
         try:
             supabase.table("usage_logs").insert({
@@ -360,8 +360,6 @@ async def biometric_match(
 ):
     """
     **Placeholder for Facial Recognition.**
-    Matches a live selfie against the photo on the ID card.
-    Corresponds to 'Multimodal Biometric Identity Confirmation'[cite: 34].
     """
     return {
         "status": "NOT_IMPLEMENTED_YET", 
@@ -373,5 +371,7 @@ async def biometric_match(
 
 if __name__ == "__main__":
     # Local Development Run Command
-    print("Starting UhakikiAI Engine...")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # UPDATED: Use dynamic port for Render
+    port = int(os.environ.get("PORT", 8000))
+    print(f"Starting UhakikiAI Engine on port {port}...")
+    uvicorn.run(app, host="0.0.0.0", port=port)
