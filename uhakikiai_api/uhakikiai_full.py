@@ -457,20 +457,34 @@ async def biometric_match(
 
 @app.get("/api/v1/docs", include_in_schema=False)
 async def custom_swagger_ui_html():
+    # Use your logo as the Favicon (tab icon)
+    logo_url = "https://tpwxyhhcyyamdumnjmjb.supabase.co/storage/v1/object/public/public-assets/uhakikiai-high-resolution-logo-transparent.svg"
+    
     html = get_swagger_ui_html(
         openapi_url=app.openapi_url,
         title=app.title + " - v1.0",
+        swagger_favicon_url=logo_url,
         swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js",
         swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css",
     )
     
-    # Custom CSS Injection for a "Cyber-Security" feel
-    custom_css = """
+    # Custom CSS to inject the logo into the top bar
+    custom_css = f"""
     <style>
-        .swagger-ui .topbar { background-color: #0d1117; border-bottom: 2px solid #00c853; }
-        .swagger-ui .info .title { font-family: 'JetBrains Mono', monospace; color: #00c853; }
-        .swagger-ui .opblock.opblock-post { background: rgba(0, 200, 83, 0.05); border-color: #00c853; }
-        section.models { display: none !important; } /* Hide clutter */
+        .swagger-ui .topbar {{ 
+            background-color: #0d1117; 
+            border-bottom: 2px solid #00c853; 
+        }}
+        .swagger-ui .topbar-wrapper .link img {{
+            content: url('{logo_url}');
+            width: 150px; /* Adjust width as needed */
+            height: auto;
+        }}
+        .swagger-ui .info .title {{ 
+            font-family: 'JetBrains Mono', monospace; 
+            color: #00c853; 
+        }}
+        section.models {{ display: none !important; }}
     </style>
     """
     
