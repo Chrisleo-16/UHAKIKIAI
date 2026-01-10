@@ -25,6 +25,8 @@ from io import BytesIO
 
 # Environment Variables
 from dotenv import load_dotenv
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.responses import HTMLResponse
 
 # --- 1. CONFIGURATION & DATABASE SETUP ---
 
@@ -282,11 +284,47 @@ def run_verification_pipeline(image_bytes):
     return response_payload
 
 # --- 4. API ROUTES ---
+description = """
+## UhakikiAI Trust Layer 🛡️
+**High-Performance Autonomous Credential Verification Engine.**
 
+Built for developers who require high-fidelity forensic analysis and secondary validation for African educational and identity documents.
+
+### 🔍 Core Intelligence:
+* **Generative Forensics:** Digital manipulation detection via ELA simulation.
+* **OCR Layer:** Powered by Tesseract-OCR for high-speed text extraction.
+* **National DB Interop:** Direct cross-referencing with `national_records`.
+
+### ⚡ Quick Specs:
+- **Version:** `1.0.0-production`
+- **Latency:** Optimized for < 2.5s verification cycles.
+- **Protocol:** RESTful JSON over HTTPS.
+"""
+
+# Grouping endpoints by 'Intelligence' tags
+tags_metadata = [
+    {
+        "name": "Verification",
+        "description": "High-level endpoints for document and biometric trust verification.",
+    },
+    {
+        "name": "Admin",
+        "description": "Institutional onboarding and secure API key management.",
+    },
+]
 app = FastAPI(
-    title="UhakikiAI Verification API",
-    description="The Trust Layer for African Credentials.",
-    version="2.0"
+    title="UhakikiAI Core Engine",
+    description=description,
+    version="1.0.0",
+    openapi_tags=tags_metadata,
+    docs_url="/api/v1/docs",      # Professional URL structure
+    redoc_url="/api/v1/redoc",
+    swagger_ui_parameters={
+        "syntaxHighlight.theme": "obsidian", # Dark mode code blocks
+        "defaultModelsExpandDepth": -1,       # Hides schema clutter
+        "docExpansion": "list",               # Neat endpoint list
+        "filter": True                        # Search bar for endpoints
+    }
 )
 
 # Root Endpoint
@@ -367,6 +405,27 @@ async def biometric_match(
         "company_id": company_id
     }
 
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html():
+    html = get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=app.title + " - v1.0",
+        swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js",
+        swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css",
+    )
+    
+    # Custom CSS Injection for a "Cyber-Security" feel
+    custom_css = """
+    <style>
+        .swagger-ui .topbar { background-color: #0d1117; border-bottom: 2px solid #00c853; }
+        .swagger-ui .info .title { font-family: 'JetBrains Mono', monospace; color: #00c853; }
+        .swagger-ui .opblock.opblock-post { background: rgba(0, 200, 83, 0.05); border-color: #00c853; }
+        section.models { display: none !important; } /* Hide clutter */
+    </style>
+    """
+    
+    new_content = html.body.decode("utf-8").replace("</head>", f"{custom_css}</head>")
+    return HTMLResponse(content=new_content)
 # --- ENTRY POINT ---
 
 if __name__ == "__main__":
