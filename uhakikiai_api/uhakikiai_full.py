@@ -29,6 +29,10 @@ from io import BytesIO
 from dotenv import load_dotenv
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
+
+
+
 
 # --- 1. CONFIGURATION & DATABASE SETUP ---
 
@@ -373,6 +377,20 @@ app = FastAPI(
         "docExpansion": "list",               # Neat endpoint list
         "filter": True                        # Search bar for endpoints
     }
+)
+origins = [
+    "https://uhakikiai.vercel.app",
+    "https://zany-happiness-pjjpxv6jj7vg3r7r9-8080.app.github.dev", # Add this exact URL
+    "http://localhost:5173",
+    "http://localhost:8080",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Root Endpoint

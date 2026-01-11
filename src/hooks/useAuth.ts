@@ -62,7 +62,7 @@ export function useAuth() {
       .from('profiles')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
     
     if (data) setProfile(data);
   };
