@@ -22,6 +22,12 @@ import { Badge } from '@/components/ui/badge';
 import { CodeCarousel } from '@/components/CodeCarousel';
 import uhakikiLogo from '@/assets/uhakiki-logo.svg';
 
+// Import partner logos
+import knecLogo from '@/assets/partners/knec.jpeg';
+import tscLogo from '@/assets/partners/tsc.jpeg';
+import ntsaLogo from '@/assets/partners/ntsa.png';
+import iebcLogo from '@/assets/partners/iebc.png';
+
 const features = [
   {
     icon: FileCheck,
@@ -63,7 +69,30 @@ const stats = [
 ];
 
 const partners = [
-  'KNEC', 'eCitizen', 'HELB', 'KUCCPS', 'TSC', 'IEBC', 'NTSA'
+  { name: 'KNEC', logo: knecLogo },
+  { name: 'TSC', logo: tscLogo },
+  { name: 'NTSA', logo: ntsaLogo },
+  { name: 'IEBC', logo: iebcLogo },
+];
+
+const programmingLanguages = [
+  { name: 'Python', logo: 'https://www.python.org/static/community_logos/python-logo-generic.svg' },
+  { name: 'JavaScript', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/6a/JavaScript-logo.png' },
+  { name: 'TypeScript', logo: 'https://upload.wikimedia.org/wikipedia/commons/4/4c/Typescript_logo_2020.svg' },
+  { name: 'Go', logo: 'https://upload.wikimedia.org/wikipedia/commons/0/05/Go_Logo_Blue.svg' },
+  { name: 'Rust', logo: 'https://upload.wikimedia.org/wikipedia/commons/d/d5/Rust_programming_language_black_logo.svg' },
+  { name: 'Java', logo: 'https://upload.wikimedia.org/wikipedia/en/3/30/Java_programming_language_logo.svg' },
+  { name: 'Swift', logo: 'https://upload.wikimedia.org/wikipedia/commons/9/9d/Swift_logo.svg' },
+  { name: 'PHP', logo: 'https://upload.wikimedia.org/wikipedia/commons/2/27/PHP-logo.svg' },
+  { name: 'Ruby', logo: 'https://upload.wikimedia.org/wikipedia/commons/7/73/Ruby_logo.svg' },
+  { name: 'Scala', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/39/Scala-full-color.svg' },
+  { name: 'Elixir', logo: 'https://upload.wikimedia.org/wikipedia/commons/9/92/Official_Elixir_logo.png' },
+  { name: 'Clojure', logo: 'https://upload.wikimedia.org/wikipedia/commons/5/5d/Clojure_logo.svg' },
+  { name: 'R', logo: 'https://upload.wikimedia.org/wikipedia/commons/1/1b/R_logo.svg' },
+  { name: 'Julia', logo: 'https://upload.wikimedia.org/wikipedia/commons/1/1f/Julia_Programming_Language_Logo.svg' },
+  { name: 'OCaml', logo: 'https://upload.wikimedia.org/wikipedia/commons/f/ff/OCaml_Logo.svg' },
+  { name: 'F#', logo: 'https://upload.wikimedia.org/wikipedia/commons/6/66/F_Sharp_logo.svg' },
+  { name: 'Groovy', logo: 'https://upload.wikimedia.org/wikipedia/commons/3/36/Groovy-logo.svg' },
 ];
 
 const testimonials = [
@@ -309,21 +338,75 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* Partners */}
-      <section className="py-16 px-6 border-y border-border/30">
+      {/* Empowering Bodies Marquee */}
+      <section className="py-16 px-6 border-y border-border/30 overflow-hidden">
         <div className="max-w-7xl mx-auto">
-          <p className="text-center text-sm text-muted-foreground mb-8">
+          <p className="text-center text-sm text-muted-foreground mb-8 uppercase tracking-wider">
             Empowering Growth with African Institutions and Government Bodies
           </p>
-          <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16">
-            {partners.map((partner) => (
-              <span 
-                key={partner}
-                className="text-xl font-bold text-muted-foreground/50 hover:text-primary transition-colors"
-              >
-                {partner}
-              </span>
-            ))}
+          <div className="relative">
+            <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-background to-transparent z-10" />
+            <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-background to-transparent z-10" />
+            <motion.div
+              className="flex gap-16 items-center"
+              animate={{ x: [0, -600] }}
+              transition={{ 
+                duration: 20, 
+                repeat: Infinity, 
+                ease: "linear",
+                repeatType: "loop"
+              }}
+            >
+              {[...partners, ...partners, ...partners].map((partner, index) => (
+                <div
+                  key={`${partner.name}-${index}`}
+                  className="flex-shrink-0 h-16 w-28 flex items-center justify-center grayscale hover:grayscale-0 transition-all duration-300 opacity-70 hover:opacity-100"
+                >
+                  <img 
+                    src={partner.logo} 
+                    alt={partner.name}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+              ))}
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* Programming Languages Marquee */}
+      <section className="py-12 px-6 bg-muted/20 overflow-hidden">
+        <div className="max-w-7xl mx-auto">
+          <p className="text-center text-sm text-muted-foreground mb-8 uppercase tracking-wider">
+            Integrate with Any Programming Language
+          </p>
+          <div className="relative">
+            <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-muted/20 to-transparent z-10" />
+            <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-muted/20 to-transparent z-10" />
+            <motion.div
+              className="flex gap-12 items-center"
+              animate={{ x: [-800, 0] }}
+              transition={{ 
+                duration: 25, 
+                repeat: Infinity, 
+                ease: "linear",
+                repeatType: "loop"
+              }}
+            >
+              {[...programmingLanguages, ...programmingLanguages].map((lang, index) => (
+                <div
+                  key={`${lang.name}-${index}`}
+                  className="flex-shrink-0 h-12 w-16 flex items-center justify-center opacity-60 hover:opacity-100 transition-opacity duration-300"
+                  title={lang.name}
+                >
+                  <img 
+                    src={lang.logo} 
+                    alt={lang.name}
+                    className="max-h-full max-w-full object-contain filter brightness-0 invert opacity-70 hover:opacity-100 transition-opacity"
+                  />
+                </div>
+              ))}
+            </motion.div>
           </div>
         </div>
       </section>
